@@ -88,6 +88,12 @@ namespace Kamek
                                    where s.name.StartsWith(prefix)
                                    select s))
                 {
+
+                    // align the location
+                    uint priorLoc = _location.Value;
+                    _location = _location + s.sh_addralign + -(_location.Value % s.sh_addralign);
+                    _binaryBlobs.Add(new byte[_location.Value - priorLoc]);
+
                     if (s.data != null)
                         _binaryBlobs.Add(s.data);
                     else
@@ -96,7 +102,7 @@ namespace Kamek
                     _sectionBases[s] = _location;
                     _location += s.sh_size;
 
-                    // Align to 4 bytes
+                    // Align to 4 bytes -- TODO: is this even necessary anymore?
                     if ((_location.Value % 4) != 0)
                     {
                         long alignment = 4 - (_location.Value % 4);
@@ -140,7 +146,6 @@ namespace Kamek
 
             _outputEnd = _location;
 
-            // TODO: maybe should align to 0x20 here?
             _bssStart = _location;
             ImportSections(".bss");
             _bssEnd = _location;
@@ -449,16 +454,16 @@ namespace Kamek
 
 
         #region Kamek Hooks
-        private Dictionary<Word, Word> _kamekRelocations = new Dictionary<Word, Word>();
+        private Dictionary<Word, Tuple<Elf.Reloc, Word>> _kamekRelocations = new Dictionary<Word, Tuple<Elf.Reloc, Word>>();
 
         private bool KamekUseReloc(Elf.Reloc type, Word source, Word dest)
         {
             if (source < _kamekStart || source >= _kamekEnd)
                 return false;
-            if (type != Elf.Reloc.R_PPC_ADDR32)
+            if (type != Elf.Reloc.R_PPC_ADDR32 && type != Elf.Reloc.R_PPC_ADDR16_LO)
                 throw new InvalidOperationException("Unsupported relocation type in the Kamek hook data section");
 
-            _kamekRelocations[source] = dest;
+            _kamekRelocations[source] = new Tuple<Elf.Reloc, Word>(type, dest);
             return true;
         }
 
@@ -478,6 +483,7 @@ namespace Kamek
             {
                 foreach (var pair in _localSymbols[elf])
                 {
+
                     if (pair.Key.StartsWith("_kHook"))
                     {
                         var cmdAddr = pair.Value.address;
@@ -489,8 +495,10 @@ namespace Kamek
                         for (int i = 0; i < argCount; i++)
                         {
                             var argAddr = cmdAddr + (8 + (i * 4));
-                            if (_kamekRelocations.ContainsKey(argAddr))
-                                args[i] = _kamekRelocations[argAddr];
+                            if (_kamekRelocations.ContainsKey(argAddr) && _kamekRelocations[argAddr].Item1 == Elf.Reloc.R_PPC_ADDR32)
+                                args[i] = _kamekRelocations[argAddr].Item2;
+                            else if (_kamekRelocations.ContainsKey(argAddr + 2) && _kamekRelocations[argAddr + 2].Item1 == Elf.Reloc.R_PPC_ADDR16_LO)
+                                args[i] = new Word(WordType.Value, ReadUInt32(argAddr) | (_kamekRelocations[argAddr + 2].Item2.Value & 0xFFFF));
                             else
                                 args[i] = new Word(WordType.Value, ReadUInt32(argAddr));
                         }
