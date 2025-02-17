@@ -181,7 +181,7 @@ namespace Kamek
             }
         }
 
-        public string PackRiivolution()
+        public string PackRiivolution(string template, string valuefilePath)
         {
             if (_baseAddress.Type == WordType.RelativeAddr)
                 throw new InvalidOperationException("cannot pack a dynamically linked binary as a Riivolution patch");
@@ -191,22 +191,27 @@ namespace Kamek
             if (_codeBlob.Length > 0)
             {
                 // add the big patch
-                // (todo: valuefile support)
-                var sb = new StringBuilder(_codeBlob.Length * 2);
-                for (int i = 0; i < _codeBlob.Length; i++)
-                    sb.AppendFormat("{0:X2}", _codeBlob[i]);
+                if (valuefilePath != null)
+					elements.Add(string.Format("<memory offset=\"0x{0:X8}\" valuefile=\"{1}\" />", _baseAddress.Value, valuefilePath));
+					
+				else
+				{
+					var sb = new StringBuilder(_codeBlob.Length * 2);
+					for (int i = 0; i < _codeBlob.Length; i++)
+						sb.AppendFormat("{0:X2}", _codeBlob[i]);
 
-                elements.Add(string.Format("<memory offset='0x{0:X8}' value='{1}' />", _baseAddress.Value, sb.ToString()));
+					elements.Add(string.Format("<memory offset=\"0x{0:X8}\" value=\"{1}\" />", _baseAddress.Value, sb.ToString()));
+				}
             }
 
             // add individual patches
             foreach (var pair in _commands)
                 elements.Add(pair.Value.PackForRiivolution());
 
-            return string.Join("\n", elements);
+            return InjectLinesIntoTemplate(template, elements.ToArray(), "Riivolution XML");
         }
 
-        public string PackDolphin()
+        public string PackDolphin(string template)
         {
             if (_baseAddress.Type == WordType.RelativeAddr)
                 throw new InvalidOperationException("cannot pack a dynamically linked binary as a Dolphin patch");
@@ -248,7 +253,7 @@ namespace Kamek
             foreach (var pair in _commands)
                 elements.Add(pair.Value.PackForDolphin());
 
-            return string.Join("\n", elements);
+            return InjectLinesIntoTemplate(template, elements.ToArray(), "Dolphin INI");
         }
 
         public string PackGeckoCodes()
@@ -328,7 +333,7 @@ namespace Kamek
             return string.Join("\n", elements);
         }
 
-        public void InjectIntoDol(Dol dol)
+        public void InjectIntoDol(CodeFiles.Dol dol)
         {
             if (_baseAddress.Type == WordType.RelativeAddr)
                 throw new InvalidOperationException("cannot pack a dynamically linked binary into a DOL");
@@ -356,7 +361,70 @@ namespace Kamek
 
             // apply all patches
             foreach (var pair in _commands)
-                pair.Value.ApplyToDol(dol);
+                pair.Value.ApplyToCodeFile(dol);
+        }
+
+        public void InjectIntoAlf(CodeFiles.Alf alf)
+        {
+            if (_baseAddress.Type == WordType.RelativeAddr)
+                throw new InvalidOperationException("cannot pack a dynamically linked binary into an ALF");
+
+            if (_codeBlob.Length > 0)
+            {
+                CodeFiles.Alf.Section codeSection = new CodeFiles.Alf.Section();
+                codeSection.LoadAddress = _baseAddress.Value;
+                codeSection.Size = (uint)_codeBlob.Length;
+                codeSection.Data = _codeBlob;
+                codeSection.Symbols = new List<CodeFiles.Alf.Symbol>();
+                alf.Sections.Add(codeSection);
+            }
+
+            if (_bssSize > 0)
+            {
+                CodeFiles.Alf.Section bssSection = new CodeFiles.Alf.Section();
+                bssSection.LoadAddress = (uint)(_baseAddress.Value + _codeBlob.Length);
+                bssSection.Size = (uint)_bssSize;
+                bssSection.Data = new byte[0];
+                bssSection.Symbols = new List<CodeFiles.Alf.Symbol>();
+                alf.Sections.Add(bssSection);
+            }
+
+            // apply all patches
+            foreach (var pair in _commands)
+                pair.Value.ApplyToCodeFile(alf);
+        }
+
+        private static string InjectLinesIntoTemplate(string template, string[] lines, string formatName)
+        {
+            if (template == null)
+            {
+                return string.Join("\n", lines);
+            }
+            else
+            {
+                int placeholderIndex = template.IndexOf("$KF$");
+                if (placeholderIndex == -1)
+                    throw new InvalidDataException(string.Format("\"$KF$\" placeholder not found in {0} template", formatName));
+                if (template.IndexOf("$KF$", placeholderIndex + 1) != -1)
+                    throw new InvalidDataException(string.Format("multiple \"$KF$\" placeholders found in {0} template", formatName));
+
+                // If the line containing $KF$ has only whitespace before it,
+                // we can use that as indentation for all of our new lines.
+                // Otherwise, be conservative and don't do that.
+
+                int placeholderLineStartIndex = template.LastIndexOf('\n', placeholderIndex) + 1;
+                string placeholderLineStart = template.Substring(
+                    placeholderLineStartIndex,
+                    placeholderIndex - placeholderLineStartIndex);
+
+                var joinString = "\n";
+                if (placeholderLineStart.All(char.IsWhiteSpace))
+                {
+                    joinString = "\n" + placeholderLineStart;
+                }
+
+                return template.Replace("$KF$", string.Join(joinString, lines));
+            }
         }
     }
 }

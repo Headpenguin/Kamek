@@ -87,20 +87,20 @@ namespace Kamek.Commands
 
                 switch (ValueType)
                 {
-                    case Type.Value8: return string.Format("<memory offset='0x{0:X8}' value='{1:X2}' original='{2:X2}' />", Address.Value.Value, Value.Value, Original.Value.Value);
-                    case Type.Value16: return string.Format("<memory offset='0x{0:X8}' value='{1:X4}' original='{2:X4}' />", Address.Value.Value, Value.Value, Original.Value.Value);
+                    case Type.Value8: return string.Format("<memory offset=\"0x{0:X8}\" value=\"{1:X2}\" original=\"{2:X2}\" />", Address.Value.Value, Value.Value, Original.Value.Value);
+                    case Type.Value16: return string.Format("<memory offset=\"0x{0:X8}\" value=\"{1:X4}\" original=\"{2:X4}\" />", Address.Value.Value, Value.Value, Original.Value.Value);
                     case Type.Value32:
-                    case Type.Pointer: return string.Format("<memory offset='0x{0:X8}' value='{1:X8}' original='{2:X8}' />", Address.Value.Value, Value.Value, Original.Value.Value);
+                    case Type.Pointer: return string.Format("<memory offset=\"0x{0:X8}\" value=\"{1:X8}\" original=\"{2:X8}\" />", Address.Value.Value, Value.Value, Original.Value.Value);
                 }
             }
             else
             {
                 switch (ValueType)
                 {
-                    case Type.Value8: return string.Format("<memory offset='0x{0:X8}' value='{1:X2}' />", Address.Value.Value, Value.Value);
-                    case Type.Value16: return string.Format("<memory offset='0x{0:X8}' value='{1:X4}' />", Address.Value.Value, Value.Value);
+                    case Type.Value8: return string.Format("<memory offset=\"0x{0:X8}\" value=\"{1:X2}\" />", Address.Value.Value, Value.Value);
+                    case Type.Value16: return string.Format("<memory offset=\"0x{0:X8}\" value=\"{1:X4}\" />", Address.Value.Value, Value.Value);
                     case Type.Value32:
-                    case Type.Pointer: return string.Format("<memory offset='0x{0:X8}' value='{1:X8}' />", Address.Value.Value, Value.Value);
+                    case Type.Pointer: return string.Format("<memory offset=\"0x{0:X8}\" value=\"{1:X8}\" />", Address.Value.Value, Value.Value);
                 }
             }
 
@@ -249,7 +249,7 @@ namespace Kamek.Commands
             }
         }
 
-        public override void ApplyToDol(Dol dol)
+        public override void ApplyToCodeFile(CodeFiles.CodeFile file)
         {
             Address.Value.AssertAbsolute();
             if (ValueType == Type.Pointer)
@@ -263,14 +263,14 @@ namespace Kamek.Commands
                 switch (ValueType)
                 {
                     case Type.Value8:
-                        patchOK = (dol.ReadByte(Address.Value.Value) == Original.Value.Value);
+                        patchOK = (file.ReadByte(Address.Value.Value) == Original.Value.Value);
                         break;
                     case Type.Value16:
-                        patchOK = (dol.ReadUInt16(Address.Value.Value) == Original.Value.Value);
+                        patchOK = (file.ReadUInt16(Address.Value.Value) == Original.Value.Value);
                         break;
                     case Type.Value32:
                     case Type.Pointer:
-                        patchOK = (dol.ReadUInt32(Address.Value.Value) == Original.Value.Value);
+                        patchOK = (file.ReadUInt32(Address.Value.Value) == Original.Value.Value);
                         break;
                 }
                 if (!patchOK)
@@ -279,10 +279,10 @@ namespace Kamek.Commands
 
             switch (ValueType)
             {
-                case Type.Value8: dol.WriteByte(Address.Value.Value, (byte)Value.Value); break;
-                case Type.Value16: dol.WriteUInt16(Address.Value.Value, (ushort)Value.Value); break;
+                case Type.Value8: file.WriteByte(Address.Value.Value, (byte)Value.Value); break;
+                case Type.Value16: file.WriteUInt16(Address.Value.Value, (ushort)Value.Value); break;
                 case Type.Value32:
-                case Type.Pointer: dol.WriteUInt32(Address.Value.Value, Value.Value); break;
+                case Type.Pointer: file.WriteUInt32(Address.Value.Value, Value.Value); break;
             }
         }
 

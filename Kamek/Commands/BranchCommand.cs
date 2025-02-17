@@ -28,7 +28,7 @@ namespace Kamek.Commands
             Address.Value.AssertAbsolute();
             Target.AssertAbsolute();
 
-            return string.Format("<memory offset='0x{0:X8}' value='{1:X8}' />", Address.Value.Value, GenerateInstruction());
+            return string.Format("<memory offset=\"0x{0:X8}\" value=\"{1:X8}\" />", Address.Value.Value, GenerateInstruction());
         }
 
         public override string PackForDolphin()
@@ -74,12 +74,12 @@ namespace Kamek.Commands
             return false;
         }
 
-        public override void ApplyToDol(Dol dol)
+        public override void ApplyToCodeFile(CodeFiles.CodeFile file)
         {
             Address.Value.AssertAbsolute();
             Target.AssertAbsolute();
 
-            dol.WriteUInt32(Address.Value.Value, GenerateInstruction());
+            file.WriteUInt32(Address.Value.Value, GenerateInstruction());
         }
 
 

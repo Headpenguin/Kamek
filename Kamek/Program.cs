@@ -10,20 +10,37 @@ namespace Kamek
 {
     class Program
     {
+        static bool Loud = true;
+
         static void Main(string[] args)
         {
-            Console.WriteLine("Kamek 2.0 by Ninji/Ash Wolf - https://github.com/Treeki/Kamek");
-            Console.WriteLine();
+            // Check for the -q/-quiet option first, so we can know if
+            // we should print the banner line
+            foreach (var arg in args)
+            {
+                if (arg == "-quiet" || arg == "-q")
+                {
+                    Loud = false;
+                    continue;
+                }
+            }
+
+            if (Loud) {
+                Console.WriteLine("Kamek 2.0 by Ninji/Ash Wolf - https://github.com/Treeki/Kamek");
+                Console.WriteLine();
+            }
 
             // Parse the command line arguments and do cool things!
             var modules = new List<Elf>();
             uint? baseAddress = null;
-            string outputKamekPath = null, outputRiivPath = null, outputDolphinPath = null, outputGeckoPath = null, outputARPath = null, outputCodePath = null;
+            string outputKamekPath = null, inputRiivPath = null, outputRiivPath = null, inputDolphinPath = null, outputDolphinPath = null, outputGeckoPath = null, outputARPath = null, outputCodePath = null;
             string inputDolPath = null, outputDolPath = null;
+            string inputAlfPath = null, outputAlfPath = null;
             string outputMapPath = null;
             var externals = new Dictionary<string, uint>();
             VersionInfo versions = null;
             var selectedVersions = new List<String>();
+            string valuefilePath = null;
 
             foreach (var arg in args)
             {
@@ -40,8 +57,12 @@ namespace Kamek
                         baseAddress = uint.Parse(arg.Substring(10), System.Globalization.NumberStyles.HexNumber);
                     else if (arg.StartsWith("-output-kamek="))
                         outputKamekPath = arg.Substring(14);
+                    else if (arg.StartsWith("-input-riiv="))
+                        inputRiivPath = arg.Substring(12);
                     else if (arg.StartsWith("-output-riiv="))
                         outputRiivPath = arg.Substring(13);
+                    else if (arg.StartsWith("-input-dolphin="))
+                        inputDolphinPath = arg.Substring(15);
                     else if (arg.StartsWith("-output-dolphin="))
                         outputDolphinPath = arg.Substring(16);
                     else if (arg.StartsWith("-output-gecko="))
@@ -54,6 +75,10 @@ namespace Kamek
                         inputDolPath = arg.Substring(11);
                     else if (arg.StartsWith("-output-dol="))
                         outputDolPath = arg.Substring(12);
+                    else if (arg.StartsWith("-input-alf="))
+                        inputAlfPath = arg.Substring(11);
+                    else if (arg.StartsWith("-output-alf="))
+                        outputAlfPath = arg.Substring(12);
                     else if (arg.StartsWith("-output-map="))
                         outputMapPath = arg.Substring(12);
                     else if (arg.StartsWith("-externals="))
@@ -62,12 +87,19 @@ namespace Kamek
                         versions = new VersionInfo(arg.Substring(10));
                     else if (arg.StartsWith("-select-version="))
                         selectedVersions.Add(arg.Substring(16));
+                    else if (arg.StartsWith("-valuefile="))
+                        valuefilePath = arg.Substring(11);
+#pragma warning disable 642
+                    else if (arg == "-quiet" || arg == "-q")
+                        ;  // already handled separately, earlier
+#pragma warning restore 642
                     else
                         Console.WriteLine("warning: unrecognised argument: {0}", arg);
                 }
                 else
                 {
-                    Console.WriteLine("adding {0} as object..", arg);
+                    if (Loud)
+                        Console.WriteLine("adding {0} as object..", arg);
                     using (var stream = new FileStream(arg, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                     {
                         modules.Add(new Elf(stream));
@@ -87,7 +119,7 @@ namespace Kamek
                 Console.WriteLine("no input files specified");
                 return;
             }
-            if (outputKamekPath == null && outputRiivPath == null && outputDolphinPath == null && outputGeckoPath == null && outputARPath == null && outputCodePath == null && outputDolPath == null)
+            if (outputKamekPath == null && outputRiivPath == null && outputDolphinPath == null && outputGeckoPath == null && outputARPath == null && outputCodePath == null && outputDolPath == null && outputAlfPath == null)
             {
                 Console.WriteLine("no output path(s) specified");
                 return;
@@ -95,6 +127,11 @@ namespace Kamek
             if (outputDolPath != null && inputDolPath == null)
             {
                 Console.WriteLine("input dol path not specified");
+                return;
+            }
+            if (outputAlfPath != null && inputAlfPath == null)
+            {
+                Console.WriteLine("input alf path not specified");
                 return;
             }
 
@@ -110,6 +147,7 @@ namespace Kamek
                 ambiguousOutputPath |= (outputARPath != null && !outputARPath.Contains("$KV$"));
                 ambiguousOutputPath |= (outputCodePath != null && !outputCodePath.Contains("$KV$"));
                 ambiguousOutputPath |= (outputDolPath != null && !outputDolPath.Contains("$KV$"));
+                ambiguousOutputPath |= (outputAlfPath != null && !outputAlfPath.Contains("$KV$"));
                 if (ambiguousOutputPath)
                 {
                     Console.WriteLine("ERROR: this configuration builds for multiple game versions, and some of the outputs will be overwritten");
@@ -118,15 +156,26 @@ namespace Kamek
                 }
             }
 
+            if (inputRiivPath != null && outputRiivPath == null)
+                Console.WriteLine("warning: -input-riiv can only be used with -output-riiv");
+
+            if (inputDolphinPath != null && outputDolphinPath == null)
+                Console.WriteLine("warning: -input-dolphin can only be used with -output-dolphin");
+
+            if (valuefilePath != null && outputRiivPath == null)
+                Console.WriteLine("warning: -valuefile can only be used with -output-riiv");
+
 
             foreach (var version in versions.Mappers)
             {
                 if (selectedVersions.Count > 0 && !selectedVersions.Contains(version.Key))
                 {
-                    Console.WriteLine("(skipping version {0} as it's not selected)", version.Key);
+                    if (Loud)
+                        Console.WriteLine("(skipping version {0} as it's not selected)", version.Key);
                     continue;
                 }
-                Console.WriteLine("linking version {0}...", version.Key);
+                if (Loud)
+                    Console.WriteLine("linking version {0}...", version.Key);
 
                 var linker = new Linker(version.Value);
                 foreach (var module in modules)
@@ -142,9 +191,19 @@ namespace Kamek
                 if (outputKamekPath != null)
                     File.WriteAllBytes(outputKamekPath.Replace("$KV$", version.Key), kf.Pack());
                 if (outputRiivPath != null)
-                    File.WriteAllText(outputRiivPath.Replace("$KV$", version.Key), kf.PackRiivolution());
+                {
+                    string inputRiivData = null;
+                    if (inputRiivPath != null)
+                        inputRiivData = File.ReadAllText(inputRiivPath.Replace("$KV$", version.Key));
+                    File.WriteAllText(outputRiivPath.Replace("$KV$", version.Key), kf.PackRiivolution(inputRiivData, valuefilePath));
+                }
                 if (outputDolphinPath != null)
-                    File.WriteAllText(outputDolphinPath.Replace("$KV$", version.Key), kf.PackDolphin());
+                {
+                    string inputDolphinData = null;
+                    if (inputDolphinPath != null)
+                        inputDolphinData = File.ReadAllText(inputDolphinPath.Replace("$KV$", version.Key));
+                    File.WriteAllText(outputDolphinPath.Replace("$KV$", version.Key), kf.PackDolphin(inputDolphinData));
+                }
                 if (outputGeckoPath != null)
                     File.WriteAllText(outputGeckoPath.Replace("$KV$", version.Key), kf.PackGeckoCodes());
                 if (outputARPath != null)
@@ -154,13 +213,24 @@ namespace Kamek
 
                 if (outputDolPath != null)
                 {
-                    var dol = new Dol(new FileStream(inputDolPath.Replace("$KV$", version.Key), FileMode.Open, FileAccess.ReadWrite, FileShare.None));
+                    var dol = new CodeFiles.Dol(new FileStream(inputDolPath.Replace("$KV$", version.Key), FileMode.Open, FileAccess.ReadWrite, FileShare.None));
                     kf.InjectIntoDol(dol);
 
                     var outpath = outputDolPath.Replace("$KV$", version.Key);
                     using (var outStream = new FileStream(outpath, FileMode.Create))
                     {
                         dol.Write(outStream);
+                    }
+                }
+                else if (outputAlfPath != null)
+                {
+                    var alf = new CodeFiles.Alf(new FileStream(inputAlfPath.Replace("$KV$", version.Key), FileMode.Open, FileAccess.ReadWrite, FileShare.None));
+                    kf.InjectIntoAlf(alf);
+
+                    var outpath = outputAlfPath.Replace("$KV$", version.Key);
+                    using (var outStream = new FileStream(outpath, FileMode.Create))
+                    {
+                        alf.Write(outStream);
                     }
                 }
 
@@ -202,6 +272,10 @@ namespace Kamek
             Console.WriteLine("  Kamek file1.o [file2.o...] [options]");
             Console.WriteLine();
             Console.WriteLine("Options:");
+            Console.WriteLine("  General:");
+            Console.WriteLine("    -quiet / -q");
+            Console.WriteLine("      don't print anything to stdout unless there are warnings or errors");
+            Console.WriteLine();
             Console.WriteLine("  Build Mode (select one; defaults to -dynamic):");
             Console.WriteLine("    -dynamic");
             Console.WriteLine("      generate a dynamically linked Kamek binary for use with the loader");
@@ -219,21 +293,35 @@ namespace Kamek
             Console.WriteLine();
             Console.WriteLine("  Outputs (at least one is required; $KV$ will be replaced with the version name):");
             Console.WriteLine("    -output-kamek=file.$KV$.bin");
-            Console.WriteLine("      write a Kamek binary to for use with the loader (-dynamic only)");
+            Console.WriteLine("      write a Kamek binary for use with the loader (-dynamic only)");
             Console.WriteLine("    -output-riiv=file.$KV$.xml");
-            Console.WriteLine("      write a Riivolution XML fragment (-static only)");
+            Console.WriteLine("      write a Riivolution XML fragment or file (-static only)");
             Console.WriteLine("    -output-dolphin=file.$KV$.ini");
-            Console.WriteLine("      write a Dolphin INI fragment (-static only)");
+            Console.WriteLine("      write a Dolphin INI fragment or file (-static only)");
             Console.WriteLine("    -output-gecko=file.$KV$.xml");
             Console.WriteLine("      write a list of Gecko codes (-static only)");
             Console.WriteLine("    -output-ar=file.$KV$.xml");
             Console.WriteLine("      write a list of Action Replay codes (-static only)");
             Console.WriteLine("    -input-dol=file.$KV$.dol -output-dol=file2.$KV$.dol");
             Console.WriteLine("      apply these patches and generate a modified DOL (-static only)");
+            Console.WriteLine("    -input-alf=file.$KV$.alf -output-alf=file2.$KV$.alf");
+            Console.WriteLine("      apply these patches and generate a modified ALF (-static only)");
             Console.WriteLine("    -output-code=file.$KV$.bin");
             Console.WriteLine("      write the combined code+data segment to file.bin (for manual injection or debugging)");
             Console.WriteLine("    -output-map=file.$KV$.map");
             Console.WriteLine("      write a list of symbols and their relative offsets (for debugging)");
+            Console.WriteLine();
+            Console.WriteLine("  Output Configuration:");
+            Console.WriteLine("    -input-riiv=file.$KV$.xml");
+            Console.WriteLine("      if -output-riiv is used, use this file as a template, where");
+            Console.WriteLine("      the magic string \"$KF$\" will be replaced by the new XML tags.");
+            Console.WriteLine("      otherwise, the new XML tags will be emitted by themselves");
+            Console.WriteLine("    -input-dolphin=file.$KV$.ini");
+            Console.WriteLine("      if -output-dolphin is used, use this file as a template, where");
+            Console.WriteLine("      the magic string \"$KF$\" will be replaced by the new INI lines.");
+            Console.WriteLine("      otherwise, the new INI lines will be emitted by themselves");
+            Console.WriteLine("    -valuefile=loader.bin");
+            Console.WriteLine("      if -output-riiv is used, emit a \"valuefile\" attribute containing this path string, instead of \"value\"");
         }
     }
 }
